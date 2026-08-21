@@ -1,0 +1,60 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: deploy-extensions
+spec:
+  params:
+    - description: Path to workspace kubeconfig
+      name: kubeconfig-path
+      type: string
+    - description: Image for the standalone Kuadrant extension (e.g. quay.io/kuadrant/internal-extensions:latest). Also acts as the toggle for deploying extensions (CRD/RBAC/Deployment).
+      name: extensions-image
+      type: string
+      default: quay.io/kuadrant/internal-extensions:latest
+    - description: ConfigMap name containing the extension CRD Helm values (extension-CRD.yaml)
+      name: extension-crd-cm
+      type: string
+      default: extension-crd
+    - description: Additional flags for helm install command, example '--set=kuadrant.extensionsNamespace=kuadrant-extensions'
+      name: additional-helm-flags
+      type: string
+      default: ""
+  steps:
+    - name: uninstall-extensions
+      args:
+        - helm uninstall -n=default --ignore-not-found --wait kuadrant-extensions
+      command:
+        - /bin/bash
+        - -vc
+      env:
+        - name: KUBECONFIG
+          value: $(params.kubeconfig-path)
+      image: quay.io/kuadrant/testsuite-pipelines-tools:latest
+      imagePullPolicy: Always
+    - name: helm-install-extensions
+      script: |
+        #!/bin/bash -v
+        set -e
+        helm install -n=default \
+          --repo https://kuadrant.io/helm-charts-olm \
+          --values=/mount/extension-crd/extension-CRD.yaml \
+          --set=kuadrant.extensionsImage="$(params.extensions-image)" \
+          $(params.additional-helm-flags) \
+          --wait --wait-for-jobs --debug \
+          kuadrant-extensions \
+          kuadrant-extensions
+      volumeMounts:
+        - mountPath: /mount/extension-crd
+          name: extension-crd
+      env:
+        - name: KUBECONFIG
+          value: $(params.kubeconfig-path)
+      image: quay.io/kuadrant/testsuite-pipelines-tools:latest
+      imagePullPolicy: Always
+  volumes:
+    - configMap:
+        name: $(params.extension-crd-cm)
+      name: extension-crd
+
+  workspaces:
+  - name: shared-workspace

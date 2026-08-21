@@ -84,6 +84,22 @@ spec:
         value: $(params.kubeconfig-path)
     image: quay.io/kuadrant/testsuite-pipelines-tools:latest
     imagePullPolicy: Always
+  - name: uninstall-extensions
+    args:
+      - |
+        if [ "$(params.install-kuadrant)" = "true" ]; then
+          helm uninstall -n=default --ignore-not-found --wait kuadrant-extensions
+        else
+          echo "Skipping Kuadrant extensions cleanup (install-kuadrant=false)"
+        fi
+    command:
+      - /bin/bash
+      - -vc
+    env:
+      - name: KUBECONFIG
+        value: $(params.kubeconfig-path)
+    image: quay.io/kuadrant/testsuite-pipelines-tools:latest
+    imagePullPolicy: Always
   - name: uninstall-operators
     args:
       - |
@@ -232,7 +248,6 @@ spec:
           $VERSION_IMAGE_FLAGS \
           --set=kuadrant.channel="$(params.channel)" \
           --set=kuadrant.operatorName="$(params.operator-name)" \
-          --set=kuadrant.extensionsImage="" \
           --set=istio.istioProvider="$(params.istio-provider)" \
           --set=tools.enabled=true \
           $(params.additional-helm-flags) \

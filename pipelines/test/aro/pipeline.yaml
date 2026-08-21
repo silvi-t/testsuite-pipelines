@@ -51,12 +51,20 @@ spec:
       name: istio-provider
       type: string
     - default: ""
+      description: Image for the standalone Kuadrant extension (e.g. quay.io/kuadrant/internal-extensions:latest). Extensions are only supported on Kuadrant v1.6+ / RHCL v1.5+ (leave empty to skip deploying extensions)
+      name: extensions-image
+      type: string
+    - default: ""
       description: Additional flags for helm install command, example '--set=kuadrant.installPlanApproval=Manual --set=kuadrant.startingCSV=kuadrant-operator.v1.2.0'
       name: additional-helm-flags
       type: string
     - default: ""
       description: Additional flags for tools helm, example '--set=tools.keycloak.keycloakProvider=deployment --set=tools.valkey.enable=false'"
       name: additional-helm-tools-flags
+      type: string
+    - default: ""
+      description: Additional flags for the extensions helm install command, example '--set=kuadrant.extensionsNamespace=kuadrant-extensions'
+      name: extensions-additional-helm-flags
       type: string
 # Testsuite related parameters
     - default: 'quay.io/kuadrant/testsuite:unstable'
@@ -224,12 +232,36 @@ spec:
       workspaces:
         - name: shared-workspace
           workspace: shared-workspace
+    - name: deploy-extensions
+      retries: 3
+      runAfter:
+        - helm-deploy
+      when:
+        - input: $(params.extensions-image)
+          operator: notin
+          values: [""]
+      taskRef:
+        kind: Task
+        name: deploy-extensions
+      params:
+        - name: kubeconfig-path
+          value: $(tasks.kubectl-login.results.kubeconfig-path)
+        - name: extensions-image
+          value: $(params.extensions-image)
+        - name: extension-crd-cm
+          value: extension-crd
+        - name: additional-helm-flags
+          value: $(params.extensions-additional-helm-flags)
+      workspaces:
+        - name: shared-workspace
+          workspace: shared-workspace
     - name: operator-pod-restart
       params:
         - name: kubeconfig-path
           value: $(tasks.kubectl-login.results.kubeconfig-path)
       runAfter:
         - helm-deploy
+        - deploy-extensions
       taskRef:
         kind: Task
         name: operator-pod-restart
